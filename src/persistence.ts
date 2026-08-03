@@ -197,3 +197,33 @@ export async function getEvents(limit = 100): Promise<unknown[]> {
     return [];
   }
 }
+
+/** Aggregate counts from dm_events for the dashboard overview (Supabase only). */
+export async function getEventStats(): Promise<{
+  linksDelivered: number;
+  sentToday: number;
+  failedToday: number;
+  total: number;
+}> {
+  const zero = { linksDelivered: 0, sentToday: 0, failedToday: 0, total: 0 };
+  if (!useSupabase) return zero;
+  try {
+    const client = await sb();
+    const today = new Date().toISOString().slice(0, 10);
+    const [delivered, sentToday, failedToday, total] = await Promise.all([
+      client.from(EVENTS_TABLE).select("*", { count: "exact", head: true }).eq("type", "link_delivered").eq("status", "success"),
+      client.from(EVENTS_TABLE).select("*", { count: "exact", head: true }).eq("status", "success").gte("created_at", today),
+      client.from(EVENTS_TABLE).select("*", { count: "exact", head: true }).eq("status", "failed").gte("created_at", today),
+      client.from(EVENTS_TABLE).select("*", { count: "exact", head: true }),
+    ]);
+    return {
+      linksDelivered: delivered.count ?? 0,
+      sentToday: sentToday.count ?? 0,
+      failedToday: failedToday.count ?? 0,
+      total: total.count ?? 0,
+    };
+  } catch (err) {
+    logger.warn("Event stats failed", (err as Error).message);
+    return zero;
+  }
+}

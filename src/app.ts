@@ -3,7 +3,7 @@ import path from "node:path";
 import express, { NextFunction, Request, Response } from "express";
 import { config } from "./config";
 import { logger } from "./logger";
-import { storageHealth, getEvents } from "./persistence";
+import { storageHealth, getEvents, getEventStats } from "./persistence";
 import { webhookRouter } from "./instagram/webhook";
 import { oauthRouter, createOAuthState } from "./instagram/oauth";
 import * as client from "./instagram/client";
@@ -92,6 +92,7 @@ export function createApp(): express.Express {
     const account = await getAccount();
     const automation = await getAutomation();
     const stats = await getStats();
+    const eventStats = await getEventStats();
     const webhookUrl = config.publicBaseUrl ? `${config.publicBaseUrl}/webhook` : "(set PUBLIC_BASE_URL)";
     const callbackUrl = config.publicBaseUrl ? `${config.publicBaseUrl}/auth/callback` : config.instagram.redirectUri;
     res.json({
@@ -101,6 +102,7 @@ export function createApp(): express.Express {
         : null,
       automation,
       stats: { ...stats, queueLength: queueLength() },
+      eventStats,
       webhookUrl,
       callbackUrl,
       verifyToken: config.webhook.verifyToken,
