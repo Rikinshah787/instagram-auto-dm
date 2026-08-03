@@ -77,6 +77,7 @@
       .badge { font-size: .7rem; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
       .badge.ok { background: rgba(52,211,153,.15); color: var(--ok); }
       .badge.err { background: rgba(248,113,113,.15); color: var(--err); }
+      .badge.skip { background: rgba(148,163,184,.18); color: var(--muted); }
       .err-text { color: var(--err); font-size: .78rem; word-break: break-word; }
 
       /* Rules + thumbnails */
@@ -393,22 +394,25 @@
         } catch (e) { if (!silent) toast(e.message, true); }
       }
 
-      const TYPE_LABEL = { invite: "Invite DM", link_delivered: "Link sent", nudge: "Follow nudge", public_reply: "Public reply" };
+      const TYPE_LABEL = { invite: "Invite DM", link_delivered: "Link sent", nudge: "Follow nudge", public_reply: "Public reply", skipped: "Skipped" };
       function activityRowHtml(ev) {
         const when = ev.created_at ? new Date(ev.created_at).toLocaleString() : "";
-        const failed = ev.status === "failed";
+        const status = ev.status || "ok";
+        const failed = status === "failed";
+        const skipped = status === "skipped";
         const user = ev.recipient_username ? "@" + ev.recipient_username : (ev.recipient_id || "").slice(0, 10);
         const m = ev.media_id ? mediaById(ev.media_id) : null;
         const post = ev.media_id ? (m && m.permalink ? `<a href="${escapeHtml(m.permalink)}" target="_blank" rel="noopener">post</a>` : escapeHtml(String(ev.media_id).slice(0, 8))) : "—";
-        const details = failed
-          ? `<span class="err-text">${escapeHtml(ev.error || "failed")}</span>`
-          : ev.link
-          ? `<a href="${escapeHtml(ev.link)}" target="_blank" rel="noopener">${escapeHtml(ev.link.slice(0, 40))}</a>`
-          : escapeHtml((ev.message || "").slice(0, 50));
+        let details;
+        if (failed) details = `<span class="err-text">${escapeHtml(ev.error || "failed")}</span>`;
+        else if (skipped) details = `<span class="muted">${escapeHtml(ev.error || ev.message || "")}</span>`;
+        else details = ev.link ? `<a href="${escapeHtml(ev.link)}" target="_blank" rel="noopener">${escapeHtml(ev.link.slice(0, 40))}</a>` : escapeHtml((ev.message || "").slice(0, 50));
+        const badgeCls = failed ? "err" : skipped ? "skip" : "ok";
+        const badgeText = failed ? "failed" : skipped ? "skipped" : "ok";
         return `<tr class="${failed ? "failed" : ""}">
           <td class="muted">${escapeHtml(when)}</td>
           <td>${escapeHtml(TYPE_LABEL[ev.type] || ev.type || "")}</td>
-          <td><span class="badge ${failed ? "err" : "ok"}">${failed ? "failed" : "ok"}</span></td>
+          <td><span class="badge ${badgeCls}">${badgeText}</span></td>
           <td>${escapeHtml(user)}</td>
           <td>${post}</td>
           <td>${details}</td>

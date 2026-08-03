@@ -140,7 +140,7 @@ export async function saveBlob(data: unknown): Promise<void> {
 
 export interface DmEventInput {
   type: string;
-  status: "success" | "failed";
+  status: "success" | "failed" | "skipped";
   igAccountId?: string;
   recipientId?: string;
   recipientUsername?: string;

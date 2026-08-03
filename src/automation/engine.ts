@@ -153,6 +153,16 @@ export async function handleCommentChange(value: CommentWebhookValue): Promise<v
   const rule = findMatchingRule(automation, mediaId, text);
   if (!rule) {
     logger.debug(`No matching rule for comment ${commentId} (media ${mediaId ?? "?"}); skipping`);
+    await logEvent({
+      type: "skipped",
+      status: "skipped",
+      igAccountId: account.igId,
+      recipientId: fromId,
+      recipientUsername: fromUsername,
+      commentId,
+      mediaId,
+      error: `No matching rule (post ${mediaId ?? "?"}, comment: "${text.slice(0, 40)}")`,
+    });
     return;
   }
 
@@ -166,6 +176,18 @@ export async function handleCommentChange(value: CommentWebhookValue): Promise<v
   // Only-once-per-user: don't message someone who already got the link.
   if (automation.onlyOncePerUser && fromId && (await hasDelivered(fromId))) {
     logger.debug(`User ${fromId} already received the link; skipping`);
+    await logEvent({
+      type: "skipped",
+      status: "skipped",
+      igAccountId: account.igId,
+      recipientId: fromId,
+      recipientUsername: fromUsername,
+      commentId,
+      mediaId,
+      ruleId: rule.id,
+      ruleName: rule.name,
+      error: "Already messaged this user (only-once-per-user is ON)",
+    });
     return;
   }
 
@@ -176,6 +198,18 @@ export async function handleCommentChange(value: CommentWebhookValue): Promise<v
     }
     if (await getPending(fromId)) {
       logger.debug(`User ${fromId} was already invited; skipping duplicate invite`);
+      await logEvent({
+        type: "skipped",
+        status: "skipped",
+        igAccountId: account.igId,
+        recipientId: fromId,
+        recipientUsername: fromUsername,
+        commentId,
+        mediaId,
+        ruleId: rule.id,
+        ruleName: rule.name,
+        error: "Already invited — waiting for their DM reply",
+      });
       return;
     }
     await setPending(fromId, {
