@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Comment → DM · Instagram automation</title>
+    <style>
+      :root {
+        --bg: #0f172a; --card: #1e293b; --muted: #94a3b8; --text: #e2e8f0;
+        --accent: #818cf8; --accent2: #6366f1; --ok: #34d399; --warn: #fbbf24; --err: #f87171;
+        --border: #334155;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+      .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+      h1 { font-size: 1.4rem; margin: 0 0 4px; }
+      .sub { color: var(--muted); margin: 0 0 24px; font-size: .9rem; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 18px; }
+      .card h2 { font-size: 1rem; margin: 0 0 14px; display: flex; align-items: center; gap: 8px; }
+      label { display: block; font-size: .82rem; color: var(--muted); margin: 12px 0 6px; }
+      input[type="text"], input[type="password"], textarea {
+        width: 100%; background: #0b1220; border: 1px solid var(--border); color: var(--text);
+        border-radius: 8px; padding: 10px 12px; font-size: .92rem; font-family: inherit;
+      }
+      textarea { resize: vertical; min-height: 76px; }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; }
+      .row > * { flex: 1; min-width: 140px; }
+      button { background: var(--accent2); color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; font-size: .9rem; font-weight: 600; cursor: pointer; }
+      button:hover { background: var(--accent); }
+      button.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+      button.danger { background: transparent; border: 1px solid var(--err); color: var(--err); }
+      .pill { font-size: .74rem; padding: 3px 10px; border-radius: 999px; font-weight: 600; }
+      .pill.ok { background: rgba(52,211,153,.15); color: var(--ok); }
+      .pill.off { background: rgba(248,113,113,.15); color: var(--err); }
+      .switch { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+      .kv { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px dashed var(--border); font-size: .86rem; }
+      .kv:last-child { border-bottom: 0; }
+      .kv code { color: var(--accent); word-break: break-all; font-size: .8rem; }
+      .muted { color: var(--muted); }
+      .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #0b1220; border: 1px solid var(--border); padding: 12px 18px; border-radius: 10px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+      .toast.show { opacity: 1; }
+      .hidden { display: none !important; }
+      small.hint { color: var(--muted); font-size: .76rem; }
+      a { color: var(--accent); }
+      .rule { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin: 10px 0; background: #0b1220; }
+      .rule-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+      .rule-head input.r-name { flex: 1; }
+      .rule select { width: 100%; background: #0b1220; border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 9px 10px; font-size: .9rem; }
+      .rule .mini { font-size: .74rem; color: var(--muted); margin: 8px 0 4px; }
+      .switch.mini { font-size: .8rem; }
+      button.icon { padding: 6px 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Comment → DM automation</h1>
+      <p class="sub">Auto-send a link in the DMs when someone comments — built on the official Instagram API (Private Replies).</p>
+
+      <!-- Admin token gate -->
+      <div id="gate" class="card">
+        <h2>🔐 Unlock dashboard</h2>
+        <label for="adminToken">Admin token <small class="hint">(the ADMIN_TOKEN from your .env)</small></label>
+        <input id="adminToken" type="password" placeholder="paste your admin token" autocomplete="off" />
+        <div style="margin-top: 14px;"><button onclick="unlock()">Unlock</button></div>
+      </div>
+
+      <div id="app" class="hidden">
+        <!-- Connection -->
+        <div class="card">
+          <h2>1 · Instagram account <span id="connBadge" class="pill off">Not connected</span></h2>
+          <div id="connEmpty">
+            <p class="muted" style="font-size:.86rem">Connect an Instagram <b>Business</b> or <b>Creator</b> account to begin.</p>
+            <button onclick="connect()">Connect Instagram</button>
+          </div>
+          <div id="connInfo" class="hidden">
+            <div class="kv"><span>Account</span><code id="accUser"></code></div>
+            <div class="kv"><span>Account ID</span><code id="accId"></code></div>
+            <div class="kv"><span>Token expires</span><code id="accExp"></code></div>
+            <div class="row" style="margin-top:14px">
+              <button class="ghost" onclick="subscribe()">Re-subscribe webhook</button>
+              <button class="danger" onclick="disconnect()">Disconnect</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Webhook setup helper -->
+        <div class="card">
+          <h2>2 · Webhook values <small class="hint">(paste these in Meta App Dashboard)</small></h2>
+          <div class="kv"><span>Callback / Webhook URL</span><code id="whUrl"></code></div>
+          <div class="kv"><span>Verify token</span><code id="whToken"></code></div>
+          <div class="kv"><span>Redirect URI (OAuth)</span><code id="cbUrl"></code></div>
+          <div class="kv"><span>Subscribed fields</span><code id="whFields"></code></div>
+        </div>
+
+        <!-- Automations (per post) -->
+        <div class="card">
+          <h2>3 · Automations <small class="hint">(one rule per video)</small></h2>
+          <div class="switch"><input type="checkbox" id="enabled" /><label for="enabled" style="margin:0">Automations enabled</label></div>
+          <small class="hint">Every comment tells us which post it's on. A rule set to a specific post wins; an <b>All posts</b> rule is the catch-all. Click <b>Load my posts</b> to pick a video, or paste its ID.</small>
+          <div class="row" style="margin:12px 0">
+            <button class="ghost" onclick="loadMedia()">↻ Load my posts</button>
+            <button onclick="addRule()">➕ Add rule</button>
+          </div>
+          <div id="rulesList"></div>
+          <div style="margin-top:16px" class="row">
+            <button onclick="saveConfig()">Save all</button>
+            <button class="ghost" onclick="load()">Reload</button>
+          </div>
+        </div>
+
+        <!-- Follow-gate -->
+        <div class="card">
+          <h2>4 · Follow-gate</h2>
+          <div class="switch"><input type="checkbox" id="requireFollow" /><label for="requireFollow" style="margin:0">Only send the link to people who follow me</label></div>
+          <small class="hint">Instagram can't reveal a follow from a comment alone, so this runs in two steps: the comment gets an invite DM, and the link is sent only after they reply <b>and</b> the follow is verified.</small>
+          <label for="inviteText">Invite DM (sent as the reply to the comment)</label>
+          <textarea id="inviteText" placeholder="Reply here and I'll send the link — make sure you're following!"></textarea>
+          <label for="followNudgeText">Nudge DM (sent once if they reply but don't follow)</label>
+          <textarea id="followNudgeText" placeholder="Please follow me first, then reply again 🙏"></textarea>
+          <div style="margin-top:14px"><button onclick="saveConfig()">Save</button></div>
+        </div>
+
+        <!-- Safety & limits -->
+        <div class="card">
+          <h2>5 · Safety &amp; limits <span class="pill ok">for high-traffic posts</span></h2>
+          <div class="switch"><input type="checkbox" id="onlyOncePerUser" /><label for="onlyOncePerUser" style="margin:0">Only ever DM each person once</label></div>
+          <div class="row">
+            <div><label for="rateLimitPerMinute">Max sends / minute</label><input id="rateLimitPerMinute" type="text" inputmode="numeric" /></div>
+            <div><label for="dailyCap">Max link DMs / day (0 = ∞)</label><input id="dailyCap" type="text" inputmode="numeric" /></div>
+          </div>
+          <div class="row">
+            <div><label for="minDelaySeconds">Min delay before send (sec)</label><input id="minDelaySeconds" type="text" inputmode="numeric" /></div>
+            <div><label for="maxDelaySeconds">Max delay before send (sec)</label><input id="maxDelaySeconds" type="text" inputmode="numeric" /></div>
+          </div>
+          <div style="margin-top:14px"><button onclick="saveConfig()">Save</button></div>
+        </div>
+
+        <!-- Live stats -->
+        <div class="card">
+          <h2>📊 Live stats</h2>
+          <div class="kv"><span>Links delivered (total)</span><code id="stDelivered">–</code></div>
+          <div class="kv"><span>Sent today</span><code id="stToday">–</code></div>
+          <div class="kv"><span>Awaiting follow (pending)</span><code id="stPending">–</code></div>
+          <div class="kv"><span>Send queue</span><code id="stQueue">–</code></div>
+          <div style="margin-top:12px"><button class="ghost" onclick="load()">Refresh</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+      let token = localStorage.getItem("adminToken") || "";
+      let media = [];
+      let rules = [];
+
+      function toast(msg, isErr) {
+        const t = document.getElementById("toast");
+        t.textContent = msg;
+        t.style.borderColor = isErr ? "var(--err)" : "var(--border)";
+        t.classList.add("show");
+        setTimeout(() => t.classList.remove("show"), 2600);
+      }
+
+      async function api(path, options = {}) {
+        const res = await fetch("/api" + path, {
+          ...options,
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + token, ...(options.headers || {}) },
+        });
+        if (res.status === 401) { lock(); throw new Error("Unauthorized — check your admin token"); }
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed (" + res.status + ")"); }
+        return res.json();
+      }
+
+      function unlock() {
+        token = document.getElementById("adminToken").value.trim();
+        if (!token) return toast("Enter your admin token", true);
+        localStorage.setItem("adminToken", token);
+        document.getElementById("gate").classList.add("hidden");
+        document.getElementById("app").classList.remove("hidden");
+        load();
+      }
+      function lock() {
+        localStorage.removeItem("adminToken");
+        document.getElementById("app").classList.add("hidden");
+        document.getElementById("gate").classList.remove("hidden");
+      }
+
+      async function connect() {
+        try { const { url } = await api("/connect"); window.location.href = url; }
+        catch (e) { toast(e.message, true); }
+      }
+      async function disconnect() {
+        if (!confirm("Disconnect this Instagram account?")) return;
+        try { await api("/disconnect", { method: "POST" }); toast("Disconnected"); load(); }
+        catch (e) { toast(e.message, true); }
+      }
+      async function subscribe() {
+        try { await api("/subscribe", { method: "POST" }); toast("Webhook re-subscribed ✓"); }
+        catch (e) { toast(e.message, true); }
+      }
+
+      function escapeHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      }
+
+      function mediaLabel(m) {
+        const cap = (m.caption || "").replace(/\s+/g, " ").trim();
+        const kind = (m.media_product_type || m.media_type || "").toString().toUpperCase();
+        const short = cap ? (cap.length > 44 ? cap.slice(0, 44) + "\u2026" : cap) : "(no caption)";
+        return (kind ? "[" + kind + "] " : "") + short;
+      }
+
+      function mediaOptions(selectedId) {
+        let opts = '<option value="">All posts (fallback)</option>';
+        const known = new Set();
+        media.forEach((m) => {
+          known.add(m.id);
+          opts += `<option value="${escapeHtml(m.id)}" ${m.id === selectedId ? "selected" : ""}>${escapeHtml(mediaLabel(m))}</option>`;
+        });
+        if (selectedId && !known.has(selectedId)) opts += `<option value="${escapeHtml(selectedId)}" selected>Post ${escapeHtml(selectedId)}</option>`;
+        return opts;
+      }
+
+      function ruleCardHtml(r, i) {
+        const kw = r.matchMode !== "any";
+        return `
+          <div class="rule" data-i="${i}">
+            <div class="rule-head">
+              <input class="r-name" type="text" placeholder="Rule name (optional)" value="${escapeHtml(r.name)}" />
+              <label class="switch mini"><input type="checkbox" class="r-enabled" ${r.enabled !== false ? "checked" : ""} /> on</label>
+              <button class="danger icon" title="Remove rule" onclick="removeRule(${i})">✕</button>
+            </div>
+            <div class="mini">Which post?</div>
+            <select class="r-media">${mediaOptions(r.mediaId || "")}</select>
+            <div class="row" style="margin-top:8px">
+              <label class="switch mini"><input type="radio" name="mm${i}" class="r-kw" ${kw ? "checked" : ""} /> on keyword</label>
+              <label class="switch mini"><input type="radio" name="mm${i}" class="r-any" ${kw ? "" : "checked"} /> every comment</label>
+            </div>
+            <input class="r-keywords" type="text" placeholder="link, info, guide" value="${escapeHtml((r.keywords || []).join(", "))}" />
+            <input class="r-link" type="text" placeholder="https://your-link.com" value="${escapeHtml(r.link || "")}" />
+            <textarea class="r-dmtext" placeholder="Here's your link 👇">${escapeHtml(r.dmText || "")}</textarea>
+            <label class="switch mini" style="margin-top:8px"><input type="checkbox" class="r-pub" ${r.publicReplyEnabled !== false ? "checked" : ""} /> public comment reply</label>
+            <input class="r-pubtext" type="text" placeholder="Just sent you a DM 📩" value="${escapeHtml(r.publicReplyText || "")}" />
+          </div>`;
+      }
+
+      function renderRules() {
+        const list = document.getElementById("rulesList");
+        if (!rules.length) { list.innerHTML = '<p class="mini" style="color:var(--muted)">No rules yet. Click “Add rule”.</p>'; return; }
+        list.innerHTML = rules.map(ruleCardHtml).join("");
+      }
+
+      function collectRules() {
+        const out = [];
+        document.querySelectorAll("#rulesList .rule").forEach((el, i) => {
+          const prev = rules[i] || {};
+          out.push({
+            id: prev.id,
+            name: el.querySelector(".r-name").value,
+            enabled: el.querySelector(".r-enabled").checked,
+            mediaId: el.querySelector(".r-media").value,
+            matchMode: el.querySelector(".r-any").checked ? "any" : "keywords",
+            keywords: el.querySelector(".r-keywords").value.split(",").map((s) => s.trim()).filter(Boolean),
+            link: el.querySelector(".r-link").value.trim(),
+            dmText: el.querySelector(".r-dmtext").value,
+            publicReplyEnabled: el.querySelector(".r-pub").checked,
+            publicReplyText: el.querySelector(".r-pubtext").value,
+          });
+        });
+        return out;
+      }
+
+      function addRule() {
+        rules = collectRules();
+        rules.push({ enabled: true, name: "", mediaId: "", matchMode: "keywords", keywords: [], link: "", dmText: "", publicReplyEnabled: true, publicReplyText: "Just sent you a DM 📩" });
+        renderRules();
+      }
+
+      function removeRule(i) {
+        rules = collectRules();
+        rules.splice(i, 1);
+        renderRules();
+      }
+
+      async function loadMedia(silent) {
+        try {
+          rules = collectRules();
+          const r = await api("/media");
+          media = r.media || [];
+          renderRules();
+          if (!silent) toast(media.length ? `Loaded ${media.length} posts` : "No posts found");
+        } catch (e) { if (!silent) toast(e.message, true); }
+      }
+
+      async function load() {
+        try {
+          const s = await api("/status");
+          // connection
+          const badge = document.getElementById("connBadge");
+          if (s.connected) {
+            badge.textContent = "Connected"; badge.className = "pill ok";
+            document.getElementById("connEmpty").classList.add("hidden");
+            document.getElementById("connInfo").classList.remove("hidden");
+            document.getElementById("accUser").textContent = s.account.username ? "@" + s.account.username : "(unknown)";
+            document.getElementById("accId").textContent = s.account.igId;
+            document.getElementById("accExp").textContent = s.account.expiresAt ? new Date(s.account.expiresAt).toLocaleString() : "n/a";
+          } else {
+            badge.textContent = "Not connected"; badge.className = "pill off";
+            document.getElementById("connEmpty").classList.remove("hidden");
+            document.getElementById("connInfo").classList.add("hidden");
+          }
+          // webhook helper
+          document.getElementById("whUrl").textContent = s.webhookUrl;
+          document.getElementById("whToken").textContent = s.verifyToken;
+          document.getElementById("cbUrl").textContent = s.callbackUrl;
+          document.getElementById("whFields").textContent = s.subscribedFields;
+          // automations (per-post rules)
+          const a = s.automation;
+          document.getElementById("enabled").checked = a.enabled;
+          rules = a.rules || [];
+          renderRules();
+          if (s.connected && !media.length) loadMedia(true);
+          // follow-gate
+          document.getElementById("requireFollow").checked = a.requireFollow;
+          document.getElementById("inviteText").value = a.inviteText || "";
+          document.getElementById("followNudgeText").value = a.followNudgeText || "";
+          // safety
+          document.getElementById("onlyOncePerUser").checked = a.onlyOncePerUser;
+          document.getElementById("rateLimitPerMinute").value = a.rateLimitPerMinute;
+          document.getElementById("dailyCap").value = a.dailyCap;
+          document.getElementById("minDelaySeconds").value = a.minDelaySeconds;
+          document.getElementById("maxDelaySeconds").value = a.maxDelaySeconds;
+          // stats
+          if (s.stats) {
+            document.getElementById("stDelivered").textContent = s.stats.deliveredCount;
+            document.getElementById("stToday").textContent = s.stats.dayCount + (a.dailyCap ? " / " + a.dailyCap : "");
+            document.getElementById("stPending").textContent = s.stats.pendingCount;
+            document.getElementById("stQueue").textContent = s.stats.queueLength;
+          }
+        } catch (e) { toast(e.message, true); }
+      }
+
+      async function saveConfig() {
+        const payload = {
+          enabled: document.getElementById("enabled").checked,
+          rules: collectRules(),
+          requireFollow: document.getElementById("requireFollow").checked,
+          inviteText: document.getElementById("inviteText").value,
+          followNudgeText: document.getElementById("followNudgeText").value,
+          onlyOncePerUser: document.getElementById("onlyOncePerUser").checked,
+          rateLimitPerMinute: Number(document.getElementById("rateLimitPerMinute").value) || 0,
+          dailyCap: Number(document.getElementById("dailyCap").value) || 0,
+          minDelaySeconds: Number(document.getElementById("minDelaySeconds").value) || 0,
+          maxDelaySeconds: Number(document.getElementById("maxDelaySeconds").value) || 0,
+        };
+        try { await api("/config", { method: "POST", body: JSON.stringify(payload) }); toast("Saved ✓"); }
+        catch (e) { toast(e.message, true); }
+      }
+
+      // Auto-unlock if a token is already stored; show a note if we just connected.
+      if (token) {
+        document.getElementById("gate").classList.add("hidden");
+        document.getElementById("app").classList.remove("hidden");
+        load().then(() => {
+          if (new URLSearchParams(location.search).get("connected")) {
+            toast("Instagram connected ✓");
+            history.replaceState({}, "", "/");
+          }
+        });
+      }
+    </script>
+  </body>
+</html>
