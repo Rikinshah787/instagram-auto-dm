@@ -3,6 +3,7 @@ import path from "node:path";
 import express, { NextFunction, Request, Response } from "express";
 import { config } from "./config";
 import { logger } from "./logger";
+import { storageHealth } from "./persistence";
 import { webhookRouter } from "./instagram/webhook";
 import { oauthRouter, createOAuthState } from "./instagram/oauth";
 import * as client from "./instagram/client";
@@ -40,9 +41,10 @@ export function createApp(): express.Express {
 
   // Endpoints that must work even when the server is misconfigured.
   app.get("/favicon.ico", (_req, res) => res.status(204).end());
-  app.get("/health", (_req, res) =>
-    res.json({ ok: config.missingEnv.length === 0, missingEnv: config.missingEnv }),
-  );
+  app.get("/health", async (_req, res) => {
+    const storage = await storageHealth();
+    res.json({ ok: config.missingEnv.length === 0 && storage.ok, missingEnv: config.missingEnv, storage });
+  });
 
   // If required env vars are missing, return a clear 503 instead of crashing.
   app.use((_req, res, next) => {

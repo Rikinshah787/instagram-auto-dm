@@ -67,6 +67,25 @@ export function warnIfEphemeral(): void {
   }
 }
 
+/** Lightweight check that the active storage backend is reachable. */
+export async function storageHealth(): Promise<{ backend: string; ok: boolean; error?: string }> {
+  const backend = backendName();
+  try {
+    if (useSupabase) {
+      const { error } = await (await sb()).from(TABLE).select("id").limit(1);
+      if (error) return { backend, ok: false, error: error.message };
+      return { backend, ok: true };
+    }
+    if (useKv) {
+      await (await kv()).get(KEY);
+      return { backend, ok: true };
+    }
+    return { backend, ok: true };
+  } catch (err) {
+    return { backend, ok: false, error: (err as Error).message };
+  }
+}
+
 export async function loadBlob(): Promise<unknown | null> {
   if (useSupabase) {
     try {
