@@ -1,4 +1,5 @@
 import * as client from "./instagram/client";
+import { config } from "./config";
 import { getAccount, setAccount, cleanupPending } from "./store";
 import { logger } from "./logger";
 
@@ -21,8 +22,21 @@ export async function refreshTokenIfNeeded(): Promise<void> {
   }
 }
 
+/** Re-confirm the account's webhook subscription (it can lapse on Meta's side). */
+export async function ensureSubscribed(): Promise<void> {
+  const account = await getAccount();
+  if (!account) return;
+  try {
+    await client.subscribeApps(account.accessToken, config.webhook.fields);
+    logger.debug("Webhook subscription confirmed");
+  } catch (err) {
+    client.logApiError("Auto re-subscribe failed", err);
+  }
+}
+
 /** Periodic maintenance run by local timers and the Vercel cron route. */
 export async function runMaintenance(): Promise<void> {
   await refreshTokenIfNeeded();
+  await ensureSubscribed();
   await cleanupPending(PENDING_MAX_AGE_MS);
 }

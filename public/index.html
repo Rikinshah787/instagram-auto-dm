@@ -472,6 +472,7 @@
         try {
           const s = await api("/status");
           renderStatus(s);
+          if (s.connected) api("/subscribe", { method: "POST" }).catch(() => {}); // auto re-confirm webhook
           const a = s.automation || {};
           document.getElementById("enabled").checked = a.enabled;
           rules = a.rules || [];
