@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import path from "node:path";
 import express, { NextFunction, Request, Response } from "express";
 import { config } from "./config";
+import { logger } from "./logger";
 import { webhookRouter } from "./instagram/webhook";
 import { oauthRouter, createOAuthState } from "./instagram/oauth";
 import * as client from "./instagram/client";
@@ -37,10 +38,28 @@ export function createApp(): express.Express {
   );
   app.use(express.urlencoded({ extended: false }));
 
+  // Endpoints that must work even when the server is misconfigured.
+  app.get("/favicon.ico", (_req, res) => res.status(204).end());
+  app.get("/health", (_req, res) =>
+    res.json({ ok: config.missingEnv.length === 0, missingEnv: config.missingEnv }),
+  );
+
+  // If required env vars are missing, return a clear 503 instead of crashing.
+  app.use((_req, res, next) => {
+    if (config.missingEnv.length > 0) {
+      res.status(503).json({
+        error: "Server is missing required environment variables",
+        missingEnv: config.missingEnv,
+        hint: "Add these in Vercel → Project → Settings → Environment Variables, then redeploy.",
+      });
+      return;
+    }
+    next();
+  });
+
   // Public routes (called by Meta / Instagram).
   app.use("/", webhookRouter);
   app.use("/", oauthRouter);
-  app.get("/health", (_req, res) => res.json({ ok: true }));
 
   // Vercel Cron target (guarded by CRON_SECRET when set): token refresh + cleanup.
   app.get("/api/cron", async (req, res) => {
@@ -160,6 +179,12 @@ export function createApp(): express.Express {
 
   // Dashboard (static). Served after routes so it never shadows them.
   app.use(express.static(path.join(__dirname, "..", "public")));
+
+  // Surface the real error instead of an opaque 500.
+  app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+    logger.error("Unhandled request error", err.message);
+    res.status(500).json({ error: err.message || "Internal error" });
+  });
 
   return app;
 }

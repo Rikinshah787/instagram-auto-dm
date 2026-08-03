@@ -168,7 +168,12 @@
           headers: { "Content-Type": "application/json", Authorization: "Bearer " + token, ...(options.headers || {}) },
         });
         if (res.status === 401) { lock(); throw new Error("Unauthorized — check your admin token"); }
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Request failed (" + res.status + ")"); }
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          let msg = e.error || ("Request failed (" + res.status + ")");
+          if (e.missingEnv && e.missingEnv.length) msg += ": " + e.missingEnv.join(", ");
+          throw new Error(msg);
+        }
         return res.json();
       }
 

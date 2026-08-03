@@ -1,11 +1,14 @@
 import "dotenv/config";
 import { logger } from "./logger";
 
+const missingEnv: string[] = [];
+
 function required(name: string): string {
   const value = process.env[name];
   if (!value || !value.trim()) {
-    logger.error(`Missing required environment variable: ${name}. Copy .env.example to .env and fill it in.`);
-    throw new Error(`Missing required environment variable: ${name}`);
+    if (!missingEnv.includes(name)) missingEnv.push(name);
+    logger.error(`Missing required environment variable: ${name}`);
+    return "";
   }
   return value.trim();
 }
@@ -38,6 +41,8 @@ export const config = {
   },
   adminToken: required("ADMIN_TOKEN"),
   dataDir: optional("DATA_DIR", "data"),
+  /** Required env vars that were not set (empty = fully configured). */
+  missingEnv,
 };
 
 export type AppConfig = typeof config;
