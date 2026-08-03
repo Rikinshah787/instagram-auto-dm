@@ -8,9 +8,27 @@ import { logger } from "./logger";
  * - Otherwise a JSON file: ./data locally, or /tmp on Vercel (ephemeral).
  */
 const KEY = "igbot:store";
+
+// Supabase (Postgres) — preferred persistent backend.
+const SUPABASE_URL = process.env.SUPABASE_URL || "";
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "";
+const useSupabase = !!(SUPABASE_URL && SUPABASE_KEY);
+const TABLE = "app_store";
+const ROW_ID = "main";
+
+let supabase: import("@supabase/supabase-js").SupabaseClient | null = null;
+async function sb() {
+  if (!supabase) {
+    const { createClient } = await import("@supabase/supabase-js");
+    supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
+  }
+  return supabase;
+}
+
+// Upstash Redis (KV) — alternative persistent backend.
 const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || "";
 const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || "";
-const useKv = !!(KV_URL && KV_TOKEN);
+const useKv = !useSupabase && !!(KV_URL && KV_TOKEN);
 
 let redis: import("@upstash/redis").Redis | null = null;
 async function kv() {
@@ -31,8 +49,8 @@ function filePath(): string {
   return path.join(fileDir(), "store.json");
 }
 
-export function backendName(): "kv" | "file" {
-  return useKv ? "kv" : "file";
+export function backendName(): "supabase" | "kv" | "file" {
+  return useSupabase ? "supabase" : useKv ? "kv" : "file";
 }
 
 let warned = false;
@@ -40,15 +58,29 @@ let warned = false;
 export function warnIfEphemeral(): void {
   if (warned) return;
   warned = true;
-  if (process.env.VERCEL && !useKv) {
+  if (process.env.VERCEL && !useSupabase && !useKv) {
     logger.warn(
-      "On Vercel without Vercel KV: data is stored in /tmp and will NOT persist across " +
-        "deployments or cold starts. Add a Vercel KV (Upstash) integration for production.",
+      "On Vercel with no database: data is stored in /tmp and will NOT persist across " +
+        "deployments or cold starts (your Instagram connection will keep dropping). " +
+        "Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (or an Upstash Redis integration).",
     );
   }
 }
 
 export async function loadBlob(): Promise<unknown | null> {
+  if (useSupabase) {
+    try {
+      const { data, error } = await (await sb()).from(TABLE).select("data").eq("id", ROW_ID).maybeSingle();
+      if (error) {
+        logger.error("Supabase read failed", error.message);
+        return null;
+      }
+      return (data as { data?: unknown } | null)?.data ?? null;
+    } catch (err) {
+      logger.error("Supabase read failed", (err as Error).message);
+      return null;
+    }
+  }
   if (useKv) {
     try {
       return (await (await kv()).get(KEY)) ?? null;
@@ -69,6 +101,11 @@ export async function loadBlob(): Promise<unknown | null> {
 }
 
 export async function saveBlob(data: unknown): Promise<void> {
+  if (useSupabase) {
+    const { error } = await (await sb()).from(TABLE).upsert({ id: ROW_ID, data }, { onConflict: "id" });
+    if (error) throw new Error(`Supabase write failed: ${error.message}`);
+    return;
+  }
   if (useKv) {
     await (await kv()).set(KEY, data);
     return;
