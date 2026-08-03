@@ -15,6 +15,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABA
 const useSupabase = !!(SUPABASE_URL && SUPABASE_KEY);
 const TABLE = "app_store";
 const ROW_ID = "main";
+const EVENTS_TABLE = "dm_events";
 
 let supabase: import("@supabase/supabase-js").SupabaseClient | null = null;
 async function sb() {
@@ -135,4 +136,64 @@ export async function saveBlob(data: unknown): Promise<void> {
   const tmp = `${file}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(data, null, 2), "utf8");
   await fs.rename(tmp, file);
+}
+
+export interface DmEventInput {
+  type: string;
+  status: "success" | "failed";
+  igAccountId?: string;
+  recipientId?: string;
+  recipientUsername?: string;
+  commentId?: string;
+  mediaId?: string;
+  ruleId?: string;
+  ruleName?: string;
+  link?: string;
+  message?: string;
+  error?: string;
+}
+
+/** Append an automation event to the dm_events table (best-effort; Supabase only). */
+export async function logEvent(e: DmEventInput): Promise<void> {
+  if (!useSupabase) return;
+  try {
+    const { error } = await (await sb()).from(EVENTS_TABLE).insert({
+      type: e.type,
+      status: e.status,
+      ig_account_id: e.igAccountId ?? null,
+      recipient_id: e.recipientId ?? null,
+      recipient_username: e.recipientUsername ?? null,
+      comment_id: e.commentId ?? null,
+      media_id: e.mediaId ?? null,
+      rule_id: e.ruleId ?? null,
+      rule_name: e.ruleName ?? null,
+      link: e.link ?? null,
+      message: e.message ?? null,
+      error: e.error ?? null,
+    });
+    if (error) logger.warn("Failed to log event", error.message);
+  } catch (err) {
+    logger.warn("Failed to log event", (err as Error).message);
+  }
+}
+
+/** Read recent automation events, newest first (Supabase only). */
+export async function getEvents(limit = 100): Promise<unknown[]> {
+  if (!useSupabase) return [];
+  const capped = Math.min(Math.max(1, Math.floor(limit)), 500);
+  try {
+    const { data, error } = await (await sb())
+      .from(EVENTS_TABLE)
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(capped);
+    if (error) {
+      logger.warn("Failed to read events", error.message);
+      return [];
+    }
+    return data ?? [];
+  } catch (err) {
+    logger.warn("Failed to read events", (err as Error).message);
+    return [];
+  }
 }

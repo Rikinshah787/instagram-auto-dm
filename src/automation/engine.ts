@@ -12,6 +12,7 @@ import {
   deletePending,
 } from "../store";
 import { enqueueSend } from "../sender";
+import { logEvent } from "../persistence";
 import { Account, AutomationConfig, CommentWebhookValue, MessagingEvent, Rule } from "../types";
 import * as client from "../instagram/client";
 
@@ -65,14 +66,48 @@ function nudgeMessage(automation: AutomationConfig): string {
   );
 }
 
-function enqueuePublicReply(account: Account, rule: Rule, commentId: string): void {
+function enqueuePublicReply(
+  account: Account,
+  rule: Rule,
+  commentId: string,
+  ctx: { mediaId?: string; recipientId?: string; username?: string },
+): void {
   if (!rule.publicReplyEnabled || !rule.publicReplyText.trim()) return;
+  const text = rule.publicReplyText.trim();
   enqueueSend({
     label: `public reply on ${commentId}`,
     countsTowardCap: false,
     run: async () => {
-      await client.replyToComment(account.accessToken, commentId, rule.publicReplyText.trim());
-      logger.debug(`Posted public reply on comment ${commentId}`);
+      try {
+        await client.replyToComment(account.accessToken, commentId, text);
+        logger.debug(`Posted public reply on comment ${commentId}`);
+        await logEvent({
+          type: "public_reply",
+          status: "success",
+          igAccountId: account.igId,
+          recipientId: ctx.recipientId,
+          recipientUsername: ctx.username,
+          commentId,
+          mediaId: ctx.mediaId,
+          ruleId: rule.id,
+          ruleName: rule.name,
+          message: text,
+        });
+      } catch (err) {
+        await logEvent({
+          type: "public_reply",
+          status: "failed",
+          igAccountId: account.igId,
+          recipientId: ctx.recipientId,
+          commentId,
+          mediaId: ctx.mediaId,
+          ruleId: rule.id,
+          ruleName: rule.name,
+          message: text,
+          error: (err as Error).message,
+        });
+        throw err;
+      }
     },
   });
 }
@@ -102,6 +137,7 @@ export async function handleCommentChange(value: CommentWebhookValue): Promise<v
   const text = (value.text || "").trim();
   const fromId = value.from?.id;
   const fromUser = value.from?.username?.toLowerCase();
+  const fromUsername = value.from?.username;
   const mediaId = value.media?.id;
 
   // Never reply to our own comments (prevents loops and self-DMs).
@@ -147,35 +183,97 @@ export async function handleCommentChange(value: CommentWebhookValue): Promise<v
       createdAt: Date.now(),
       nudged: false,
       deliveryText: buildDeliveryText(rule),
+      mediaId,
+      ruleId: rule.id,
+      ruleName: rule.name,
+      link: rule.link,
+      username: fromUsername,
     });
+    const inviteText = inviteMessage(automation);
     enqueueSend({
       label: `follow-gate invite for comment ${commentId}`,
       countsTowardCap: true,
       run: async () => {
-        await client.sendPrivateReply(account.accessToken, commentId, inviteMessage(automation));
-        logger.info(`Sent follow-gate invite for comment ${commentId}`);
+        try {
+          await client.sendPrivateReply(account.accessToken, commentId, inviteText);
+          logger.info(`Sent follow-gate invite for comment ${commentId}`);
+          await logEvent({
+            type: "invite",
+            status: "success",
+            igAccountId: account.igId,
+            recipientId: fromId,
+            recipientUsername: fromUsername,
+            commentId,
+            mediaId,
+            ruleId: rule.id,
+            ruleName: rule.name,
+            link: rule.link,
+            message: inviteText,
+          });
+        } catch (err) {
+          await logEvent({
+            type: "invite",
+            status: "failed",
+            igAccountId: account.igId,
+            recipientId: fromId,
+            recipientUsername: fromUsername,
+            commentId,
+            mediaId,
+            ruleId: rule.id,
+            ruleName: rule.name,
+            error: (err as Error).message,
+          });
+          throw err;
+        }
       },
     });
-    enqueuePublicReply(account, rule, commentId);
+    enqueuePublicReply(account, rule, commentId, { mediaId, recipientId: fromId, username: fromUsername });
     return;
   }
 
   // Direct delivery (no follow-gate): reserve the user so retries can't double-send.
   if (automation.onlyOncePerUser && fromId) await markDelivered(fromId);
+  const deliveryText = buildDeliveryText(rule);
   enqueueSend({
     label: `link private reply for comment ${commentId}`,
     countsTowardCap: true,
     run: async () => {
       try {
-        const result = await client.sendPrivateReply(account.accessToken, commentId, buildDeliveryText(rule));
+        const result = await client.sendPrivateReply(account.accessToken, commentId, deliveryText);
         logger.info(`Sent link private reply for comment ${commentId}`, { messageId: result.message_id });
+        await logEvent({
+          type: "link_delivered",
+          status: "success",
+          igAccountId: account.igId,
+          recipientId: fromId,
+          recipientUsername: fromUsername,
+          commentId,
+          mediaId,
+          ruleId: rule.id,
+          ruleName: rule.name,
+          link: rule.link,
+          message: deliveryText,
+        });
       } catch (err) {
         if (automation.onlyOncePerUser && fromId) await unmarkDelivered(fromId);
+        await logEvent({
+          type: "link_delivered",
+          status: "failed",
+          igAccountId: account.igId,
+          recipientId: fromId,
+          recipientUsername: fromUsername,
+          commentId,
+          mediaId,
+          ruleId: rule.id,
+          ruleName: rule.name,
+          link: rule.link,
+          error: (err as Error).message,
+        });
         throw err;
       }
     },
   });
-  enqueuePublicReply(account, rule, commentId);
+  enqueuePublicReply(account, rule, commentId, { mediaId, recipientId: fromId, username: fromUsername });
 }
 
 /**
@@ -228,16 +326,43 @@ export async function handleMessagingEvent(event: MessagingEvent): Promise<void>
   if (decision === "deliver") {
     await markDelivered(senderId);
     await deletePending(senderId);
+    const linkText = pending.deliveryText || "Here's your link! 🙌";
     enqueueSend({
       label: `link DM to follower ${senderId}`,
       countsTowardCap: true,
       run: async () => {
-        await client.sendTextDM(
-          account.accessToken,
-          senderId,
-          pending.deliveryText || "Here's your link! 🙌",
-        );
-        logger.info(`Delivered link to follower ${senderId}`);
+        try {
+          await client.sendTextDM(account.accessToken, senderId, linkText);
+          logger.info(`Delivered link to follower ${senderId}`);
+          await logEvent({
+            type: "link_delivered",
+            status: "success",
+            igAccountId: account.igId,
+            recipientId: senderId,
+            recipientUsername: pending.username,
+            commentId: pending.commentId,
+            mediaId: pending.mediaId,
+            ruleId: pending.ruleId,
+            ruleName: pending.ruleName,
+            link: pending.link,
+            message: linkText,
+          });
+        } catch (err) {
+          await logEvent({
+            type: "link_delivered",
+            status: "failed",
+            igAccountId: account.igId,
+            recipientId: senderId,
+            recipientUsername: pending.username,
+            commentId: pending.commentId,
+            mediaId: pending.mediaId,
+            ruleId: pending.ruleId,
+            ruleName: pending.ruleName,
+            link: pending.link,
+            error: (err as Error).message,
+          });
+          throw err;
+        }
       },
     });
     return;
@@ -249,12 +374,38 @@ export async function handleMessagingEvent(event: MessagingEvent): Promise<void>
     return;
   }
   await setPending(senderId, { ...pending, nudged: true });
+  const nudgeText = nudgeMessage(automation);
   enqueueSend({
     label: `follow nudge to ${senderId}`,
     countsTowardCap: false,
     run: async () => {
-      await client.sendTextDM(account.accessToken, senderId, nudgeMessage(automation));
-      logger.info(`Sent follow nudge to ${senderId}`);
+      try {
+        await client.sendTextDM(account.accessToken, senderId, nudgeText);
+        logger.info(`Sent follow nudge to ${senderId}`);
+        await logEvent({
+          type: "nudge",
+          status: "success",
+          igAccountId: account.igId,
+          recipientId: senderId,
+          recipientUsername: pending.username,
+          commentId: pending.commentId,
+          mediaId: pending.mediaId,
+          ruleId: pending.ruleId,
+          ruleName: pending.ruleName,
+          message: nudgeText,
+        });
+      } catch (err) {
+        await logEvent({
+          type: "nudge",
+          status: "failed",
+          igAccountId: account.igId,
+          recipientId: senderId,
+          recipientUsername: pending.username,
+          commentId: pending.commentId,
+          error: (err as Error).message,
+        });
+        throw err;
+      }
     },
   });
 }

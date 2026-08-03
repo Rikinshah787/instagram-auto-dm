@@ -3,7 +3,7 @@ import path from "node:path";
 import express, { NextFunction, Request, Response } from "express";
 import { config } from "./config";
 import { logger } from "./logger";
-import { storageHealth } from "./persistence";
+import { storageHealth, getEvents } from "./persistence";
 import { webhookRouter } from "./instagram/webhook";
 import { oauthRouter, createOAuthState } from "./instagram/oauth";
 import * as client from "./instagram/client";
@@ -144,6 +144,12 @@ export function createApp(): express.Express {
     } catch (err) {
       res.status(502).json({ error: (err as Error).message });
     }
+  });
+
+  api.get("/events", async (req, res) => {
+    const limit = Number(req.query.limit) || 100;
+    const events = await getEvents(limit);
+    res.json({ events });
   });
 
   api.post("/config", async (req, res) => {

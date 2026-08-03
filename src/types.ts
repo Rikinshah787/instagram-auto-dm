@@ -65,6 +65,11 @@ export interface PendingFollow {
   nudged: boolean;
   /** The resolved link message to send once the follow is verified. */
   deliveryText: string;
+  mediaId?: string;
+  ruleId?: string;
+  ruleName?: string;
+  link?: string;
+  username?: string;
 }
 
 export interface StoreShape {
