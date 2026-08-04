@@ -338,27 +338,56 @@
           <div class="rule" data-i="${i}">
             <div class="rule-head">
               <input class="r-name" type="text" placeholder="Rule name (optional)" value="${escapeHtml(r.name)}" />
-              <label class="switch mini"><input type="checkbox" class="r-enabled" ${r.enabled !== false ? "checked" : ""} /> on</label>
+              <label class="switch mini"><input type="checkbox" class="r-enabled" ${r.enabled !== false ? "checked" : ""} onchange="updateRuleStatus(${i})" /> on</label>
               <button class="danger icon" title="Remove rule" onclick="removeRule(${i})">✕</button>
             </div>
             <div class="mini">Which post?</div>
-            <select class="r-media" onchange="updateRulePreview(${i})">${mediaOptions(r.mediaId || "")}</select>
+            <select class="r-media" onchange="updateRulePreview(${i});updateRuleStatus(${i})">${mediaOptions(r.mediaId || "")}</select>
             <div class="r-preview">${mediaPreviewHtml(r.mediaId || "")}</div>
             <div class="row" style="margin-top:8px">
-              <label class="switch mini"><input type="radio" name="mm${i}" class="r-kw" ${kw ? "checked" : ""} /> on keyword</label>
-              <label class="switch mini"><input type="radio" name="mm${i}" class="r-any" ${kw ? "" : "checked"} /> every comment</label>
+              <label class="switch mini"><input type="radio" name="mm${i}" class="r-kw" ${kw ? "checked" : ""} onchange="updateRuleStatus(${i})" /> on keyword</label>
+              <label class="switch mini"><input type="radio" name="mm${i}" class="r-any" ${kw ? "" : "checked"} onchange="updateRuleStatus(${i})" /> every comment</label>
             </div>
-            <input class="r-keywords" type="text" placeholder="link, info, guide" value="${escapeHtml((r.keywords || []).join(", "))}" />
-            <input class="r-link" type="text" placeholder="https://your-link.com" value="${escapeHtml(r.link || "")}" />
-            <textarea class="r-dmtext" placeholder="Here's your link 👇">${escapeHtml(r.dmText || "")}</textarea>
+            <input class="r-keywords" type="text" placeholder="link, info, guide" value="${escapeHtml((r.keywords || []).join(", "))}" oninput="updateRuleStatus(${i})" />
+            <input class="r-link" type="text" placeholder="https://your-link.com" value="${escapeHtml(r.link || "")}" oninput="updateRuleStatus(${i})" />
+            <textarea class="r-dmtext" placeholder="Here's your link 👇" oninput="updateRuleStatus(${i})">${escapeHtml(r.dmText || "")}</textarea>
+            <div class="r-status mini"></div>
             <label class="switch mini" style="margin-top:8px"><input type="checkbox" class="r-pub" ${r.publicReplyEnabled !== false ? "checked" : ""} /> public comment reply</label>
             <input class="r-pubtext" type="text" placeholder="Just sent you a DM 📩" value="${escapeHtml(r.publicReplyText || "")}" />
           </div>`;
+      }
+      function ruleStatusText(o) {
+        if (!o.enabled) return { ok: false, msg: "Off — this rule won't run." };
+        const any = o.matchMode === "any";
+        const kws = (o.keywords || []).filter(Boolean);
+        if (!any && kws.length === 0) return { ok: false, msg: "Won't match anything — pick “every comment” or add keywords." };
+        if (!o.link && !o.dmText) return { ok: false, msg: "No link or message set — nothing to send." };
+        const scope = o.mediaId ? "this post only" : "ALL posts";
+        const trig = any ? "every comment" : "comments containing: " + kws.join(", ");
+        return { ok: true, msg: "Will DM on " + trig + " (" + scope + ")." };
+      }
+      function updateRuleStatus(i) {
+        const el = document.querySelector(`#rulesList .rule[data-i="${i}"]`);
+        if (!el) return;
+        const s = ruleStatusText({
+          enabled: el.querySelector(".r-enabled").checked,
+          matchMode: el.querySelector(".r-any").checked ? "any" : "keywords",
+          keywords: el.querySelector(".r-keywords").value.split(",").map((x) => x.trim()).filter(Boolean),
+          link: el.querySelector(".r-link").value.trim(),
+          dmText: el.querySelector(".r-dmtext").value.trim(),
+          mediaId: el.querySelector(".r-media").value,
+        });
+        const box = el.querySelector(".r-status");
+        box.textContent = (s.ok ? "✅ " : "⚠️ ") + s.msg;
+        box.style.color = s.ok ? "#4ade80" : "#fbbf24";
+        box.style.marginTop = "8px";
+        box.style.fontWeight = "600";
       }
       function renderRules() {
         const list = document.getElementById("rulesList");
         if (!rules.length) { list.innerHTML = '<p class="mini" style="color:var(--muted)">No rules yet. Click “Add rule”.</p>'; return; }
         list.innerHTML = rules.map(ruleCardHtml).join("");
+        rules.forEach((_, i) => updateRuleStatus(i));
       }
       function collectRules() {
         const out = [];
@@ -381,7 +410,7 @@
       }
       function addRule() {
         rules = collectRules();
-        rules.push({ enabled: true, name: "", mediaId: "", matchMode: "keywords", keywords: [], link: "", dmText: "", publicReplyEnabled: true, publicReplyText: "Just sent you a DM 📩" });
+        rules.push({ enabled: true, name: "", mediaId: "", matchMode: "any", keywords: [], link: "", dmText: "", publicReplyEnabled: true, publicReplyText: "Just sent you a DM 📩" });
         renderRules();
       }
       function removeRule(i) {
