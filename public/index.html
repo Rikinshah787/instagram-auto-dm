@@ -155,6 +155,7 @@
             <p class="sub">One rule per post. A rule set to a specific post wins; an “All posts” rule is the catch-all.</p>
             <div class="card">
               <div class="switch"><input type="checkbox" id="enabled" /><label for="enabled" style="margin:0">Automations enabled</label></div>
+              <div id="noLinkWarn" style="display:none;margin:12px 0;padding:10px 12px;border-radius:10px;background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.5);color:#fbbf24;font-weight:600">⚠️ No active rule has a link yet — comments won't get a DM. Turn a rule <b>on</b> and paste your link in the field below, then <b>Save all</b>.</div>
               <div class="row" style="margin:12px 0">
                 <button class="ghost" onclick="loadMedia()">↻ Load my posts</button>
                 <button onclick="addRule()">➕ Add rule</button>
@@ -382,12 +383,26 @@
         box.style.color = s.ok ? "#4ade80" : "#fbbf24";
         box.style.marginTop = "8px";
         box.style.fontWeight = "600";
+        refreshRuleWarning();
+      }
+      function refreshRuleWarning() {
+        const warn = document.getElementById("noLinkWarn");
+        if (!warn) return;
+        let ok = false;
+        document.querySelectorAll("#rulesList .rule").forEach((el) => {
+          const en = el.querySelector(".r-enabled").checked;
+          const link = el.querySelector(".r-link").value.trim();
+          const dm = el.querySelector(".r-dmtext").value.trim();
+          if (en && (link || dm)) ok = true;
+        });
+        warn.style.display = ok ? "none" : "block";
       }
       function renderRules() {
         const list = document.getElementById("rulesList");
-        if (!rules.length) { list.innerHTML = '<p class="mini" style="color:var(--muted)">No rules yet. Click “Add rule”.</p>'; return; }
+        if (!rules.length) { list.innerHTML = '<p class="mini" style="color:var(--muted)">No rules yet. Click “Add rule”.</p>'; refreshRuleWarning(); return; }
         list.innerHTML = rules.map(ruleCardHtml).join("");
         rules.forEach((_, i) => updateRuleStatus(i));
+        refreshRuleWarning();
       }
       function collectRules() {
         const out = [];
