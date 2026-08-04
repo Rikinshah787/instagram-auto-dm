@@ -154,6 +154,36 @@ export function createApp(): express.Express {
     res.json({ events });
   });
 
+  api.get("/comments", async (req, res) => {
+    const account = await getAccount();
+    if (!account) {
+      res.status(400).json({ error: "No account connected" });
+      return;
+    }
+    try {
+      const mediaIdParam = String(req.query.mediaId || "");
+      let mediaIds: string[];
+      if (mediaIdParam) {
+        mediaIds = [mediaIdParam];
+      } else {
+        const media = await client.getMedia(account.accessToken, 5);
+        mediaIds = media.map((m) => m.id).slice(0, 3);
+      }
+      const comments: Array<Record<string, unknown>> = [];
+      for (const mid of mediaIds) {
+        try {
+          const list = await client.getMediaComments(account.accessToken, mid, 15);
+          for (const c of list) comments.push({ mediaId: mid, ...c });
+        } catch (err) {
+          comments.push({ mediaId: mid, error: (err as Error).message });
+        }
+      }
+      res.json({ comments });
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
+    }
+  });
+
   api.post("/config", async (req, res) => {
     const b = (req.body || {}) as Record<string, unknown>;
     const patch: Partial<AutomationConfig> = {};

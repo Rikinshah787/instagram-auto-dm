@@ -140,7 +140,20 @@ export async function getMedia(
   const res = await apiFetch(`${GRAPH}/${V}/me/media?${params.toString()}`, { method: "GET" });
   return Array.isArray(res?.data) ? res.data : [];
 }
-
+/** Read recent comments on one of the account's media objects (diagnostic). */
+export async function getMediaComments(
+  token: string,
+  mediaId: string,
+  limit = 20,
+): Promise<Array<{ id: string; text?: string; username?: string; timestamp?: string }>> {
+  const params = new URLSearchParams({
+    fields: "id,text,username,timestamp",
+    limit: String(limit),
+    access_token: token,
+  });
+  const res = await apiFetch(`${GRAPH}/${V}/${mediaId}/comments?${params.toString()}`, { method: "GET" });
+  return Array.isArray(res?.data) ? res.data : [];
+}
 /** Subscribe the connected account to webhook fields (e.g. "comments"). */
 export async function subscribeApps(token: string, fields: string): Promise<{ success: boolean }> {
   const params = new URLSearchParams({ subscribed_fields: fields, access_token: token });

@@ -142,6 +142,11 @@
               <small class="hint">Every invite, link, nudge and public reply. Failed rows show the Instagram error.</small>
               <div id="activity" style="margin-top:10px"><p class="muted">Loading…</p></div>
             </div>
+            <div class="card">
+              <h2>🔎 Live comments <span class="badge skip">debug</span> <button class="ghost icon" style="margin-left:auto" onclick="fetchComments()">Fetch</button></h2>
+              <small class="hint">Reads recent comments on your posts directly from Instagram. If comments show here but NOT in Recent activity above, the webhook isn't delivering them (Meta side) — not your rule.</small>
+              <div id="commentsBox" style="margin-top:10px"></div>
+            </div>
           </section>
 
           <!-- AUTOMATIONS -->
@@ -431,6 +436,23 @@
           </tr></thead><tbody>${events.map(activityRowHtml).join("")}</tbody></table>`;
         } catch (e) {
           box.innerHTML = '<p class="muted">Could not load activity: ' + escapeHtml(e.message) + "</p>";
+        }
+      }
+
+      async function fetchComments() {
+        const box = document.getElementById("commentsBox");
+        box.innerHTML = '<p class="muted">Fetching from Instagram…</p>';
+        try {
+          const { comments } = await api("/comments");
+          if (!comments || !comments.length) {
+            box.innerHTML = '<p class="muted">No comments found on your recent posts (or none readable with the current permissions).</p>';
+            return;
+          }
+          box.innerHTML = `<table class="activity"><thead><tr><th>When</th><th>User</th><th>Comment</th><th>Comment ID</th></tr></thead><tbody>${comments
+            .map((c) => `<tr class="${c.error ? "failed" : ""}"><td class="muted">${c.timestamp ? new Date(c.timestamp).toLocaleString() : ""}</td><td>${c.username ? "@" + escapeHtml(c.username) : ""}</td><td>${c.error ? '<span class="err-text">' + escapeHtml(c.error) + "</span>" : escapeHtml((c.text || "").slice(0, 70))}</td><td class="muted">${escapeHtml(String(c.id || "").slice(0, 14))}</td></tr>`)
+            .join("")}</tbody></table>`;
+        } catch (e) {
+          box.innerHTML = '<p class="muted">Error: ' + escapeHtml(e.message) + "</p>";
         }
       }
 
