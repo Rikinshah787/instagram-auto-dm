@@ -35,8 +35,9 @@ function ruleCanSend(rule: Rule): boolean {
 
 /**
  * Pick the rule for a comment. A post-specific rule wins over an "all posts"
- * fallback; if neither matches, the first active rule that can send is used so a
- * comment is never dropped just because no post/keyword rule matched.
+ * fallback. If nothing matches, only an "all posts" rule may act as a safety
+ * net — never another post's rule — so one post's link is never delivered on a
+ * different post.
  */
 function findMatchingRule(
   automation: AutomationConfig,
@@ -48,7 +49,7 @@ function findMatchingRule(
   const matched =
     specific.find((r) => ruleMatches(r, mediaId, text)) ??
     fallback.find((r) => ruleMatches(r, mediaId, text));
-  return matched ?? automation.rules.find(ruleCanSend);
+  return matched ?? fallback.find(ruleCanSend);
 }
 
 /** The final message that carries the link, resolved from the matched rule. */
