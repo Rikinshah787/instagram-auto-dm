@@ -130,15 +130,6 @@
           <section id="tab-overview" class="tab active">
             <h1>Overview</h1>
             <p class="sub">Live activity from your automation. Numbers are exact (from the database).</p>
-            <div class="card" style="border:1px solid rgba(74,222,128,.45)">
-              <h2>⚡ Quick start — turn DMs on in one step</h2>
-              <small class="hint">Paste the link you want to auto-DM, then click Activate. Sets one simple rule: DM this link to everyone who comments on any post, with no follow-gate. (Replaces existing rules.)</small>
-              <div class="row" style="margin-top:10px;gap:8px">
-                <input id="quickLink" type="text" placeholder="https://your-link.com" style="flex:1;min-width:220px" />
-                <button onclick="quickActivate()">Activate</button>
-              </div>
-              <div id="quickMsg" class="mini" style="margin-top:8px;font-weight:600"></div>
-            </div>
             <div class="stats">
               <div class="stat"><div class="n" id="stDelivered">–</div><div class="l">Links delivered (total)</div></div>
               <div class="stat"><div class="n" id="stToday">–</div><div class="l">Sent today</div></div>
@@ -161,10 +152,10 @@
           <!-- AUTOMATIONS -->
           <section id="tab-automations" class="tab">
             <h1>Automations</h1>
-            <p class="sub">Map one link per video below (1:1). Advanced keyword &amp; all-posts rules are underneath.</p>
+            <p class="sub">Map one link per video below — strict 1:1. The advanced per-rule editor is underneath.</p>
             <div class="card">
               <h2>🎯 Per-post links (one link per video) <button class="ghost icon" style="margin-left:auto" onclick="loadPostLinks()">Load my videos</button></h2>
-              <small class="hint">The simplest 1:1 setup: paste a link beside each video (leave blank to skip it). Every comment on that video gets its own link. Saving turns automation on and follow-gate off.</small>
+              <small class="hint">Strict 1:1 — paste a link beside each video (leave blank to skip). Only videos you give a link to will DM; there is NO shared/all-posts link. Saving replaces all rules, turns automation on and follow-gate off.</small>
               <div id="postLinks" style="margin-top:10px"><p class="muted">Click “Load my videos” to list your posts.</p></div>
               <div class="row" style="margin-top:10px"><button onclick="savePostLinks()">Save per-post links</button><span id="postLinksMsg" class="mini" style="margin-left:10px;font-weight:600"></span></div>
             </div>
@@ -483,13 +474,12 @@
 
       async function savePostLinks() {
         const msg = document.getElementById("postLinksMsg");
-        const fallback = (rules || []).filter((r) => !r.mediaId);
         const perPost = [];
         document.querySelectorAll("#postLinks .pl-link").forEach((el) => {
           const link = el.value.trim();
           if (link) perPost.push({ enabled: true, name: "", mediaId: el.getAttribute("data-mid"), matchMode: "any", keywords: [], link, dmText: "", publicReplyEnabled: true, publicReplyText: "Just sent you a DM 📩" });
         });
-        const newRules = [...perPost, ...fallback];
+        const newRules = [...perPost];
         if (!newRules.length) { msg.textContent = "⚠️ Add at least one link."; msg.style.color = "#fbbf24"; return; }
         msg.textContent = "Saving…"; msg.style.color = "var(--muted)";
         try {
@@ -648,24 +638,6 @@
         };
         try { await api("/config", { method: "POST", body: JSON.stringify(payload) }); toast("Saved ✓"); }
         catch (e) { toast(e.message, true); }
-      }
-
-      async function quickActivate() {
-        const msg = document.getElementById("quickMsg");
-        const link = document.getElementById("quickLink").value.trim();
-        if (!link) { msg.textContent = "⚠️ Paste your link first."; msg.style.color = "#fbbf24"; return; }
-        if (!/^https?:\/\//i.test(link)) { msg.textContent = "⚠️ Link must start with http:// or https://"; msg.style.color = "#fbbf24"; return; }
-        const rule = { enabled: true, name: "All posts", mediaId: "", matchMode: "any", keywords: [], link, dmText: "", publicReplyEnabled: true, publicReplyText: "Just sent you a DM 📩" };
-        msg.textContent = "Saving…"; msg.style.color = "var(--muted)";
-        try {
-          await api("/config", { method: "POST", body: JSON.stringify({ enabled: true, requireFollow: false, rules: [rule] }) });
-          rules = [rule];
-          renderRules();
-          const en = document.getElementById("enabled"); if (en) en.checked = true;
-          const rf = document.getElementById("requireFollow"); if (rf) rf.checked = false;
-          msg.textContent = "✅ Activated! Every comment now gets this link. Test with a comment from another account (the DM lands in Message Requests if they don't follow you).";
-          msg.style.color = "#4ade80";
-        } catch (e) { msg.textContent = "Error: " + e.message; msg.style.color = "#fbbf24"; }
       }
 
       // Auto-unlock if a token is already stored; show a note if we just connected.
