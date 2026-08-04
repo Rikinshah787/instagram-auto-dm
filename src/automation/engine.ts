@@ -28,7 +28,16 @@ function ruleMatches(rule: Rule, mediaId: string | undefined, text: string): boo
   });
 }
 
-/** Pick the rule for a comment: a post-specific rule wins over an "all posts" fallback. */
+/** True when a rule can actually deliver something (has a link or custom text). */
+function ruleCanSend(rule: Rule): boolean {
+  return rule.enabled && (rule.link.trim() !== "" || rule.dmText.trim() !== "");
+}
+
+/**
+ * Pick the rule for a comment. A post-specific rule wins over an "all posts"
+ * fallback; if neither matches, the first active rule that can send is used so a
+ * comment is never dropped just because no post/keyword rule matched.
+ */
 function findMatchingRule(
   automation: AutomationConfig,
   mediaId: string | undefined,
@@ -36,10 +45,10 @@ function findMatchingRule(
 ): Rule | undefined {
   const specific = automation.rules.filter((r) => r.mediaId);
   const fallback = automation.rules.filter((r) => !r.mediaId);
-  return (
+  const matched =
     specific.find((r) => ruleMatches(r, mediaId, text)) ??
-    fallback.find((r) => ruleMatches(r, mediaId, text))
-  );
+    fallback.find((r) => ruleMatches(r, mediaId, text));
+  return matched ?? automation.rules.find(ruleCanSend);
 }
 
 /** The final message that carries the link, resolved from the matched rule. */
@@ -152,7 +161,7 @@ export async function handleCommentChange(value: CommentWebhookValue): Promise<v
   // Find the per-post rule that should handle this comment (specific post wins).
   const rule = findMatchingRule(automation, mediaId, text);
   if (!rule) {
-    logger.debug(`No matching rule for comment ${commentId} (media ${mediaId ?? "?"}); skipping`);
+    logger.debug(`No active rule can send for comment ${commentId} (media ${mediaId ?? "?"}); skipping`);
     await logEvent({
       type: "skipped",
       status: "skipped",
@@ -161,7 +170,7 @@ export async function handleCommentChange(value: CommentWebhookValue): Promise<v
       recipientUsername: fromUsername,
       commentId,
       mediaId,
-      error: `No matching rule (post ${mediaId ?? "?"}, comment: "${text.slice(0, 40)}")`,
+      error: `No active rule with a link set (post ${mediaId ?? "?"}, comment: "${text.slice(0, 40)}")`,
     });
     return;
   }
