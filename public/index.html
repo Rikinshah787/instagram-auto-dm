@@ -161,7 +161,13 @@
           <!-- AUTOMATIONS -->
           <section id="tab-automations" class="tab">
             <h1>Automations</h1>
-            <p class="sub">One rule per post. A rule set to a specific post wins; an “All posts” rule is the catch-all.</p>
+            <p class="sub">Map one link per video below (1:1). Advanced keyword &amp; all-posts rules are underneath.</p>
+            <div class="card">
+              <h2>🎯 Per-post links (one link per video) <button class="ghost icon" style="margin-left:auto" onclick="loadPostLinks()">Load my videos</button></h2>
+              <small class="hint">The simplest 1:1 setup: paste a link beside each video (leave blank to skip it). Every comment on that video gets its own link. Saving turns automation on and follow-gate off.</small>
+              <div id="postLinks" style="margin-top:10px"><p class="muted">Click “Load my videos” to list your posts.</p></div>
+              <div class="row" style="margin-top:10px"><button onclick="savePostLinks()">Save per-post links</button><span id="postLinksMsg" class="mini" style="margin-left:10px;font-weight:600"></span></div>
+            </div>
             <div class="card">
               <div class="switch"><input type="checkbox" id="enabled" /><label for="enabled" style="margin:0">Automations enabled</label></div>
               <div id="noLinkWarn" style="display:none;margin:12px 0;padding:10px 12px;border-radius:10px;background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.5);color:#fbbf24;font-weight:600">⚠️ No active rule has a link yet — comments won't get a DM. Turn a rule <b>on</b> and paste your link in the field below, then <b>Save all</b>.</div>
@@ -450,6 +456,50 @@
           renderRules();
           if (!silent) toast(media.length ? `Loaded ${media.length} posts` : "No posts found");
         } catch (e) { if (!silent) toast(e.message, true); }
+      }
+
+      async function loadPostLinks() {
+        const box = document.getElementById("postLinks");
+        box.innerHTML = '<p class="muted">Loading your videos…</p>';
+        try {
+          if (!media.length) { const r = await api("/media"); media = r.media || []; }
+          if (document.querySelectorAll("#rulesList .rule").length) rules = collectRules();
+          const byMedia = {};
+          (rules || []).forEach((r) => { if (r.mediaId) byMedia[r.mediaId] = r; });
+          if (!media.length) { box.innerHTML = '<p class="muted">No posts found.</p>'; return; }
+          box.innerHTML = media
+            .map((m) => {
+              const ex = byMedia[m.id];
+              const link = ex ? ex.link || "" : "";
+              const src = m.thumbnail_url || m.media_url || "";
+              const img = src
+                ? `<img src="${escapeHtml(src)}" style="width:46px;height:46px;border-radius:8px;object-fit:cover" />`
+                : '<div style="width:46px;height:46px;border-radius:8px;background:#222"></div>';
+              return `<div class="row" style="gap:10px;align-items:center;margin:8px 0">${img}<div class="mini" style="flex:1;min-width:110px">${escapeHtml((m.caption || "(no caption)").slice(0, 46))}</div><input class="pl-link" data-mid="${escapeHtml(m.id)}" type="text" placeholder="Paste link for this video (blank = skip)" value="${escapeHtml(link)}" style="flex:2;min-width:200px" /></div>`;
+            })
+            .join("");
+        } catch (e) { box.innerHTML = '<p class="muted">Error: ' + escapeHtml(e.message) + "</p>"; }
+      }
+
+      async function savePostLinks() {
+        const msg = document.getElementById("postLinksMsg");
+        const fallback = (rules || []).filter((r) => !r.mediaId);
+        const perPost = [];
+        document.querySelectorAll("#postLinks .pl-link").forEach((el) => {
+          const link = el.value.trim();
+          if (link) perPost.push({ enabled: true, name: "", mediaId: el.getAttribute("data-mid"), matchMode: "any", keywords: [], link, dmText: "", publicReplyEnabled: true, publicReplyText: "Just sent you a DM 📩" });
+        });
+        const newRules = [...perPost, ...fallback];
+        if (!newRules.length) { msg.textContent = "⚠️ Add at least one link."; msg.style.color = "#fbbf24"; return; }
+        msg.textContent = "Saving…"; msg.style.color = "var(--muted)";
+        try {
+          await api("/config", { method: "POST", body: JSON.stringify({ enabled: true, requireFollow: false, rules: newRules }) });
+          rules = newRules; renderRules();
+          const en = document.getElementById("enabled"); if (en) en.checked = true;
+          const rf = document.getElementById("requireFollow"); if (rf) rf.checked = false;
+          msg.textContent = "✅ Saved " + perPost.length + " per-video link(s). Each video now DMs its own link.";
+          msg.style.color = "#4ade80";
+        } catch (e) { msg.textContent = "Error: " + e.message; msg.style.color = "#fbbf24"; }
       }
 
       const TYPE_LABEL = { invite: "Invite DM", link_delivered: "Link sent", nudge: "Follow nudge", public_reply: "Public reply", skipped: "Skipped" };
