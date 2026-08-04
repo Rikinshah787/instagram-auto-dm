@@ -43,7 +43,29 @@ export function createApp(): express.Express {
   app.get("/favicon.ico", (_req, res) => res.status(204).end());
   app.get("/health", async (_req, res) => {
     const storage = await storageHealth();
-    res.json({ ok: config.missingEnv.length === 0 && storage.ok, missingEnv: config.missingEnv, storage });
+    // Non-sensitive config summary (no tokens, links, or usernames) for remote diagnosis.
+    let diag: Record<string, unknown>;
+    try {
+      const [account, automation] = await Promise.all([getAccount(), getAutomation()]);
+      diag = {
+        connected: !!account,
+        automationEnabled: automation.enabled,
+        ruleCount: automation.rules.length,
+        activeRulesWithLink: automation.rules.filter(
+          (r) => r.enabled && (r.link.trim() !== "" || r.dmText.trim() !== ""),
+        ).length,
+        onlyOncePerUser: automation.onlyOncePerUser,
+        requireFollow: automation.requireFollow,
+      };
+    } catch (err) {
+      diag = { error: (err as Error).message };
+    }
+    res.json({
+      ok: config.missingEnv.length === 0 && storage.ok,
+      missingEnv: config.missingEnv,
+      storage,
+      diag,
+    });
   });
 
   // If required env vars are missing, return a clear 503 instead of crashing.
