@@ -211,7 +211,10 @@ export function createApp(): express.Express {
     const patch: Partial<AutomationConfig> = {};
 
     if (typeof b.enabled === "boolean") patch.enabled = b.enabled;
-    if (Array.isArray(b.rules)) patch.rules = b.rules.slice(0, 100).map(normalizeRule);
+    // Ignore an empty rules array so a stray or too-early save can never wipe saved rules.
+    if (Array.isArray(b.rules) && b.rules.length > 0) {
+      patch.rules = b.rules.slice(0, 100).map(normalizeRule);
+    }
 
     // Follow-gate
     if (typeof b.requireFollow === "boolean") patch.requireFollow = b.requireFollow;

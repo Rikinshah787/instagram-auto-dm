@@ -435,7 +435,7 @@
       }
       async function loadMedia(silent) {
         try {
-          rules = collectRules();
+          if (document.querySelectorAll("#rulesList .rule").length) rules = collectRules();
           const r = await api("/media");
           media = r.media || [];
           renderRules();
@@ -567,9 +567,17 @@
       function refreshAll() { load(); }
 
       async function saveConfig() {
+        const collectedRules = collectRules();
+        const enabled = document.getElementById("enabled").checked;
+        const anyActiveLink = collectedRules.some(
+          (r) => r.enabled && (String(r.link || "").trim() || String(r.dmText || "").trim()),
+        );
+        if (enabled && !anyActiveLink) {
+          if (!confirm("⚠️ No active rule has a link, so saving now would STOP your DMs. Save anyway?")) return;
+        }
         const payload = {
-          enabled: document.getElementById("enabled").checked,
-          rules: collectRules(),
+          enabled,
+          rules: collectedRules,
           requireFollow: document.getElementById("requireFollow").checked,
           inviteText: document.getElementById("inviteText").value,
           followNudgeText: document.getElementById("followNudgeText").value,
