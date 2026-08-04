@@ -130,6 +130,15 @@
           <section id="tab-overview" class="tab active">
             <h1>Overview</h1>
             <p class="sub">Live activity from your automation. Numbers are exact (from the database).</p>
+            <div class="card" style="border:1px solid rgba(74,222,128,.45)">
+              <h2>⚡ Quick start — turn DMs on in one step</h2>
+              <small class="hint">Paste the link you want to auto-DM, then click Activate. Sets one simple rule: DM this link to everyone who comments on any post, with no follow-gate. (Replaces existing rules.)</small>
+              <div class="row" style="margin-top:10px;gap:8px">
+                <input id="quickLink" type="text" placeholder="https://your-link.com" style="flex:1;min-width:220px" />
+                <button onclick="quickActivate()">Activate</button>
+              </div>
+              <div id="quickMsg" class="mini" style="margin-top:8px;font-weight:600"></div>
+            </div>
             <div class="stats">
               <div class="stat"><div class="n" id="stDelivered">–</div><div class="l">Links delivered (total)</div></div>
               <div class="stat"><div class="n" id="stToday">–</div><div class="l">Sent today</div></div>
@@ -589,6 +598,24 @@
         };
         try { await api("/config", { method: "POST", body: JSON.stringify(payload) }); toast("Saved ✓"); }
         catch (e) { toast(e.message, true); }
+      }
+
+      async function quickActivate() {
+        const msg = document.getElementById("quickMsg");
+        const link = document.getElementById("quickLink").value.trim();
+        if (!link) { msg.textContent = "⚠️ Paste your link first."; msg.style.color = "#fbbf24"; return; }
+        if (!/^https?:\/\//i.test(link)) { msg.textContent = "⚠️ Link must start with http:// or https://"; msg.style.color = "#fbbf24"; return; }
+        const rule = { enabled: true, name: "All posts", mediaId: "", matchMode: "any", keywords: [], link, dmText: "", publicReplyEnabled: true, publicReplyText: "Just sent you a DM 📩" };
+        msg.textContent = "Saving…"; msg.style.color = "var(--muted)";
+        try {
+          await api("/config", { method: "POST", body: JSON.stringify({ enabled: true, requireFollow: false, rules: [rule] }) });
+          rules = [rule];
+          renderRules();
+          const en = document.getElementById("enabled"); if (en) en.checked = true;
+          const rf = document.getElementById("requireFollow"); if (rf) rf.checked = false;
+          msg.textContent = "✅ Activated! Every comment now gets this link. Test with a comment from another account (the DM lands in Message Requests if they don't follow you).";
+          msg.style.color = "#4ade80";
+        } catch (e) { msg.textContent = "Error: " + e.message; msg.style.color = "#fbbf24"; }
       }
 
       // Auto-unlock if a token is already stored; show a note if we just connected.
