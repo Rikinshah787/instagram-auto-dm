@@ -43,10 +43,14 @@ export function createApp(): express.Express {
   app.get("/favicon.ico", (_req, res) => res.status(204).end());
   app.get("/health", async (_req, res) => {
     const storage = await storageHealth();
-    // Non-sensitive config summary (no tokens, links, or usernames) for remote diagnosis.
+    // Non-sensitive config + recent-activity summary (no tokens or usernames) for remote diagnosis.
     let diag: Record<string, unknown>;
     try {
-      const [account, automation] = await Promise.all([getAccount(), getAutomation()]);
+      const [account, automation, events] = await Promise.all([
+        getAccount(),
+        getAutomation(),
+        getEvents(6).catch(() => []),
+      ]);
       diag = {
         connected: !!account,
         automationEnabled: automation.enabled,
@@ -54,8 +58,21 @@ export function createApp(): express.Express {
         activeRulesWithLink: automation.rules.filter(
           (r) => r.enabled && (r.link.trim() !== "" || r.dmText.trim() !== ""),
         ).length,
+        rules: automation.rules.map((r) => ({
+          post: r.mediaId || "ALL",
+          on: r.enabled,
+          hasLink: !!(r.link.trim() || r.dmText.trim()),
+          mode: r.matchMode,
+        })),
         onlyOncePerUser: automation.onlyOncePerUser,
         requireFollow: automation.requireFollow,
+        recent: (events || []).slice(0, 6).map((e: any) => ({
+          at: e.created_at,
+          type: e.type,
+          status: e.status,
+          media: e.media_id,
+          reason: e.error,
+        })),
       };
     } catch (err) {
       diag = { error: (err as Error).message };
