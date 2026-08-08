@@ -28,7 +28,10 @@ async function apiFetch(url: string, init?: FetchInit): Promise<any> {
   }
   if (!res.ok) {
     const err = json?.error ?? json;
-    throw new InstagramApiError(err?.message || `HTTP ${res.status}`, res.status, err);
+    const bits = [err?.message || `HTTP ${res.status}`];
+    if (err?.code != null) bits.push(`code ${err.code}${err.error_subcode ? "/" + err.error_subcode : ""}`);
+    if (err?.type) bits.push(String(err.type));
+    throw new InstagramApiError(bits.join(" — "), res.status, err);
   }
   return json;
 }

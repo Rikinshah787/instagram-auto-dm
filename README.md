@@ -1,5 +1,9 @@
 # Comment → DM (Instagram automation)
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node.js >=18.17](https://img.shields.io/badge/node-%3E%3D18.17-339933)](package.json)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
+
 Automatically send a link in a **DM** when someone **comments** on your Instagram
 post or reel — built entirely on the **official Instagram API** (the *Private
 Replies* feature). No scraping, no browser bots, no unofficial endpoints, so it
@@ -7,6 +11,23 @@ stays within Instagram's Platform Terms.
 
 > Inspired by the open‑source [insta‑p8 / InstaAuto](https://github.com/ayuuxh2/insta-p8)
 > project, but trimmed down to one focused, easy‑to‑audit flow: **comment → DM**.
+
+If this saves you the pain of wrangling the Instagram Graph API yourself,
+**⭐ star the repo** — and see [Contributing](#contributing) if you'd like to help
+improve it.
+
+![Dashboard overview — live delivery stats and activity feed](docs/screenshot-overview.png)
+
+### Contents
+
+- [How it works](#how-it-works)
+- [Requirements](#requirements)
+- [Quick start (local)](#quick-start-local) — install → tunnel → configure → run → test, ~5 minutes
+- [Configuration](#configuration-the-automation)
+- [Environment variables](#environment-variables)
+- [Deploy](#deploy)
+- [Staying within Instagram's rules](#staying-within-instagrams-rules)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -77,6 +98,17 @@ counters (delivered, sent today, pending, queue depth) are on the dashboard.
 
 ## Quick start (local)
 
+**~5 minutes, 6 steps:**
+
+- [ ] 1. `npm install`
+- [ ] 2. Expose `localhost:3000` over HTTPS (ngrok / Cloudflare Tunnel)
+- [ ] 3. Copy `.env.example` → `.env` and fill in the values
+- [ ] 4. Point the Meta App Dashboard at your tunnel URL (redirect URI + webhook)
+- [ ] 5. `npm run dev`
+- [ ] 6. Open the dashboard, connect Instagram, save your automation
+
+Details for each step below.
+
 ### 1. Install
 
 ```powershell
@@ -131,6 +163,11 @@ npm run dev      # watch mode
 npm run build; npm start
 ```
 
+> **Before deploying publicly:** `public/privacy.html` and `public/terms.html`
+> ship with placeholder contact details (`you@example.com`) — replace them with
+> your own before going live; Meta requires working privacy/terms links for
+> production API access.
+
 Open **http://localhost:3000**, paste your `ADMIN_TOKEN` to unlock, then:
 
 1. **Connect Instagram** → log in and approve. The app stores a long‑lived token
@@ -152,6 +189,8 @@ send a sample event and watch it flow through the server logs.
 ## Configuration (the automation)
 
 Everything below is editable from the dashboard and stored in `data/store.json`.
+
+![Automations tab — map each post to its own link, plus the advanced rule editor](docs/screenshot-automations.png)
 
 ### Per-post rules — "which video → which link"
 
@@ -339,6 +378,18 @@ vercel.json                Vercel routing, function config, and daily cron
   permission, already replied) is logged with details.
 - **OAuth "Invalid state"** — the connect link expired (10 min). Click *Connect* again.
 
+## Contributing
+
+Issues and PRs are welcome — bug fixes, docs, and small focused features
+especially. For anything larger (new provider, new send channel, storage
+backend), open an issue first to align on the approach before writing code.
+
+```powershell
+npm install
+npm run typecheck   # must pass before opening a PR
+npm run dev
+```
+
 ## License
 
-MIT.
+[MIT](LICENSE) © 2026 Rikin Shah
