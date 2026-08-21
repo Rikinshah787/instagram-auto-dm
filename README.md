@@ -9,9 +9,6 @@ post or reel — built entirely on the **official Instagram API** (the *Private
 Replies* feature). No scraping, no browser bots, no unofficial endpoints, so it
 stays within Instagram's Platform Terms.
 
-> Inspired by the open‑source [insta‑p8 / InstaAuto](https://github.com/ayuuxh2/insta-p8)
-> project, but trimmed down to one focused, easy‑to‑audit flow: **comment → DM**.
-
 If this saves you the pain of wrangling the Instagram Graph API yourself,
 **⭐ star the repo** — and see [Contributing](#contributing) if you'd like to help
 improve it.
